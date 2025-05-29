@@ -1,0 +1,23 @@
+triton==3.2.0
+torch==2.6.0
+transformers==4.45.0
+pytest
+matplotlib
+pandas
+seaborn
+accelerate==0.26.0
+flash-attn==2.6.3
+datasets
+fuzzywuzzy
+minference==0.1.5.post1
+jieba
+rouge
+# ruler benchmark
+nemo-toolkit[all]
+tritonclient[all]
+wonderwords
+NumPy==1.26.4
+tenacity
+ffmpeg
+html2text
+
