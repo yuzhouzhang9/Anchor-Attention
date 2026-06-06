@@ -1,7 +1,0 @@
-nemo-toolkit[all]
-tritonclient[all]
-wonderwords
-NumPy==2.1
-tenacity
-ffmpeg
-html2text

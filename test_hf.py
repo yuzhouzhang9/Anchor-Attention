@@ -1,22 +1,42 @@
 import os
+import sys
 import time
 import torch
 import json
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from my_utils.load_test_data import get_test_data
-from anchor_attn import patch_model
 import argparse
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+from patch import patch_model
+
+
+def load_data(data_name="niah_multikey_3"):
+    data_path = os.path.join("data/test_data", f"{data_name}.jsonl")
+    res = []
+    with open(data_path, "r", encoding="utf-8") as f:
+        for line in f:
+            data = json.loads(line.strip())
+            res.append({
+                "input": data["input"],
+                "output": data["output"],
+            })
+    return res, 32
+
 
 def main(
         device="cuda:0",
-        pattern="flash"
+        pattern="anchorattn",
+        data_name="niah_multikey_3",
+        output_path="data/result.jsonl",
 ):
-    data, mx_len = get_test_data()
+    data, mx_len = load_data(data_name)
     answers = []
     preds = []
+    correct = 0
     for idx, item in enumerate(data):
-        prompts = item["prompt"]
-        tokenized_prompts = tokenizer(prompts, return_tensors="pt", padding=True).to(device)
+        prompt = item["input"]
+        target = item["output"]
+        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding=True).to(device)
         context_length = tokenized_prompts.input_ids.shape[1]
 
         # Prefill phase: Measure time for processing the input prompt
@@ -48,40 +68,43 @@ def main(
         print(f"Total time: {tot_time:.2f}ms")
 
         response = tokenizer.decode(output[0, context_length:], skip_special_tokens=True)
-        pred = response
+        prediction = response
         print(f"context_length: {context_length}")
-        print(f"pred: [{pred}]")
-        print(f"answer: {item['outputs']}")
-        answers.append(item['outputs'])
-        preds.append(pred)
+        print(f"prediction: [{prediction}]")
+        print(f"output: {target}")
+        answers.append(target)
+        preds.append(prediction)
+        is_correct = target in prediction
+        correct += int(is_correct)
 
         # Add to results list for JSON output
         result = {
-            "pred": pred,
-            "answer": item['outputs'],
+            "input": prompt[:100] + "...",
+            "output": target,
+            "prediction": prediction,
+            "data_name": data_name,
             "pattern": pattern,
             "idx": idx,
             "context_length": context_length,
             "prefill_time": prefill_time,
             "tot_time": tot_time,
-            "config":args.config
+            "config": args.config,
+            "is_correct": is_correct,
         }
         try:
-            with open("data/result.jsonl", "a", encoding="utf-8") as f:
+            with open(output_path, "a", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False)
                 f.write("\n")  # JSONL 每 row 一个对象
         except Exception as e:
-            print(f"Failed to write to result.jsonl: {e}")
+            print(f"Failed to write to {output_path}: {e}")
 
     for i in range(len(answers)):
-        print(f"pred: [{preds[i]}], answer: {answers[i]}")
+        print(f"prediction: [{preds[i]}], output: {answers[i]}")
 
-    print("Results appended to data/result.jsonl")
+    print(f"Accuracy: {correct}/{len(data)}")
+    print(f"Results appended to {output_path}")
 
 if __name__ == "__main__":
-    from my_utils import Logger
-    import time
-    Logger.set_log_file_path(f"log/test_hf/{time.time()}.log")
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Process prompts and generate responses.")
     # Device and dataset arguments
@@ -99,11 +122,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pattern",
         type=str,
-        default="anchor_attn",  # 默认模式
+        default="anchorattn",  # 默认模式
         choices=[
-            "default", "flash", "streaming_llm", "minfer", "vertical_slash", "flex_prefill", "anchor_attn", "anchor_attn_lite", 
+            "baseline", "baseline_flash", "baseline_streaming_llm",
+            "baseline_minference", "baseline_vertical_slash",
+            "baseline_flex_prefill", "anchorattn",
         ],
-        help="The attention pattern to use in patch_model. Default is 'anchor_attn'."
+        help="Attention method: anchorattn or one of the baseline_* methods."
     )
 
     parser.add_argument(
@@ -111,7 +136,20 @@ if __name__ == "__main__":
         type=str,
         default=None
     )
-    # python test_hf.py --pattern flex_prefill --config '{"block_size": 128,"flex_prefill_gamma": 0.95,"flex_prefill_tau": 0.1,"flex_prefill_min_budget": 1024,"flex_prefill_max_budget": null}'
+    parser.add_argument(
+        "--data_name",
+        type=str,
+        default="niah_multikey_3",
+        choices=["niah_single_1", "niah_multikey_3"],
+        help="Dataset name under data/test_data without the .jsonl suffix.",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default="data/result.jsonl",
+        help="Path to append JSONL results.",
+    )
+    # python test_hf.py --pattern baseline_flex_prefill --config '{"block_size": 128,"flex_prefill_gamma": 0.95,"flex_prefill_tau": 0.1,"flex_prefill_min_budget": 1024,"flex_prefill_max_budget": null}'
     args = parser.parse_args()
     file_name = os.path.basename(__file__)
     model_path = args.model_path
@@ -132,7 +170,9 @@ if __name__ == "__main__":
         model_name = model_path.split("/")[-1]
         main(
             device=args.device,
-            pattern=args.pattern
+            pattern=args.pattern,
+            data_name=args.data_name,
+            output_path=args.output_path,
         )
     except Exception as e:
         print(f"An error occurred: {e}")

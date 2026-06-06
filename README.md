@@ -1,48 +1,109 @@
-# AnchorAttention: Difference-Aware Sparse Attention with Stripe Granularity
+# AnchorAttn: Difference-Aware Sparse Attention with Stripe Granularity
 
+AnchorAttn is a dynamic sparse attention implementation for accelerating the
+prefill phase of long-context LLM inference. It identifies important attention
+regions at stripe granularity, then computes sparse attention with Triton kernels
+while preserving the model's HuggingFace generation interface.
 
-## Abstract
+The method is based on three stages:
 
+1. **Pattern-based anchor computation**: compute anchor scores from initial and
+   local attention regions, and cache online-softmax states.
+2. **Difference-aware stripe sparsity identification**: compare compressed query
+   scores against anchor scores to select important discrete KV coordinates.
+3. **Fine-grained sparse computation**: compute final sparse attention over the
+   selected coordinates while reusing the cached online-softmax states.
 
-Large Language Models (LLMs) with extended context lengths face significant computational challenges during the pre-filling phase, primarily due to the quadratic complexity of self-attention. Existing methods typically employ dynamic pattern matching and block-sparse low-level implementations. However, their reliance on local information for pattern identification fails to capture global contexts, and the coarse granularity of blocks leads to persistent internal sparsity, resulting in suboptimal accuracy and efficiency. To address these limitations, we propose \textbf{AnchorAttention}, a difference-aware, dynamic sparse attention mechanism that efficiently identifies critical attention regions at a finer stripe granularity while adapting to global contextual information, achieving superior speed and accuracy. AnchorAttention comprises three key components: (1) \textbf{Pattern-based Anchor Computation}, leveraging the commonalities present across all inputs to rapidly compute a set of near-maximum scores as the anchor; (2) \textbf{Difference-aware Stripe Sparsity Identification}, performing difference-aware comparisons with the anchor to quickly obtain discrete coordinates of significant regions in a stripe-like sparsity pattern; (3) \textbf{Fine-grained Sparse Computation}, replacing the traditional contiguous KV block loading approach with simultaneous discrete KV position loading to maximize sparsity rates while preserving full hardware computational potential.
-With its finer-grained sparsity strategy, \textbf{AnchorAttention} achieves higher sparsity rates at the same recall level, significantly reducing computation time. Compared to previous state-of-the-art methods, at a text length of 128k, it achieves a speedup of 1.44$\times$ while maintaining higher recall rates. 
+Compared with block-level sparse attention methods, AnchorAttn uses finer
+stripe-level sparsity to reduce unnecessary computation in long-context prefill.
 
-
-
-## Start
-
-To install the required packages:
+## Installation
 
 ```bash
 conda create -n anchorattn python=3.10
 conda activate anchorattn
 pip install -r requirements.txt
+pip install -e .
 ```
 
+## Quick Start
 
-quick start
+Run AnchorAttn:
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-python test_hf.py --model_path your_model_path --pattern anchor_attn
+CUDA_VISIBLE_DEVICES=0 python test_hf.py \
+  --model_path your_model_path/Llama-3.1-8B-Instruct \
+  --pattern anchorattn \
+  --config '{"theta":12,"step":16,"block_size_M":128}'
 ```
 
-benchmark test
+Run a baseline:
 
 ```bash
-# Change your model path
-bash script/run_longbench_v1.sh
-bash script/run_needle.sh
-bash script/run_ruler.sh
+CUDA_VISIBLE_DEVICES=0 python test_hf.py \
+  --model_path your_model_path/Llama-3.1-8B-Instruct \
+  --pattern baseline_flex_prefill \
+  --config '{"block_size":128,"flex_prefill_gamma":0.95,"flex_prefill_tau":0.1}'
+```
+
+## Test Data
+
+`test_hf.py` reads JSONL files from `data/test_data`.
+
+Each sample uses:
+
+```json
+{"input": "question or prompt text", "output": "reference answer"}
+```
+
+Available test sets:
+
+```text
+niah_single_1
+niah_multikey_3
+```
+
+Example:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python test_hf.py \
+  --model_path your_model_path/Llama-3.1-8B-Instruct \
+  --pattern anchorattn \
+  --data_name niah_single_1 \
+  --output_path outputs/test_data_anchorattn.jsonl
 ```
 
 
-## Support model
+## Supported Models
 
-Llama-3.1-8B-Instruct
+- Llama-3.1-8B-Instruct
+- Qwen2.5-7B-Instruct
 
-Qwen2.5-7B-Instruct
+## Citation
 
-## implementation
+If you use this work, please cite the ACL Anthology paper:
 
-based on flexprefill and minference
+```bibtex
+@inproceedings{zhang-etal-2025-anchorattention,
+    title = "{A}nchor{A}ttention: Difference-Aware Sparse Attention with Stripe Granularity",
+    author = "Zhang, Yu  and
+      Guo, Dong  and
+      Wu, Fang  and
+      Zhu, Guoliang  and
+      Ding, Dian  and
+      Zhang, Yiming",
+    editor = "Christodoulopoulos, Christos  and
+      Chakraborty, Tanmoy  and
+      Rose, Carolyn  and
+      Peng, Violet",
+    booktitle = "Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing",
+    month = nov,
+    year = "2025",
+    address = "Suzhou, China",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2025.emnlp-main.430/",
+    doi = "10.18653/v1/2025.emnlp-main.430",
+    pages = "8537--8549",
+    ISBN = "979-8-89176-332-6"
+}
+```

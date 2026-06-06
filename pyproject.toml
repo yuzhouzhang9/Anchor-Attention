@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anchor-attention"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "AnchorAttention and baseline attention methods."
+
+[tool.setuptools]
+py-modules = ["patch"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"baseline.minference" = ["cuda*.so"]
+"baseline.minference.configs" = ["*.json"]
