@@ -1,3 +1,5 @@
+
+
 # AnchorAttn: Difference-Aware Sparse Attention with Stripe Granularity
 
 AnchorAttn is a dynamic sparse attention implementation for accelerating the
@@ -86,11 +88,11 @@ If you use this work, please cite the ACL Anthology paper:
 ```bibtex
 @inproceedings{zhang-etal-2025-anchorattention,
     title = "{A}nchor{A}ttention: Difference-Aware Sparse Attention with Stripe Granularity",
-    author = "Zhang, Yu  and
-      Guo, Dong  and
-      Wu, Fang  and
-      Zhu, Guoliang  and
-      Ding, Dian  and
+    author = "Zhang, Yu and
+      Guo, Dong and
+      Wu, Fang and
+      Zhu, Guoliang and
+      Ding, Dian and
       Zhang, Yiming",
     editor = "Christodoulopoulos, Christos  and
       Chakraborty, Tanmoy  and
